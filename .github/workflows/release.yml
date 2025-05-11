@@ -1,0 +1,70 @@
+name: Build and Release Go Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger the workflow on version tag pushes, e.g. v1.0.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        os: [linux, windows, darwin]  # Build for Linux, Windows, and macOS
+        goarch: [amd64, arm64]        # Build for both amd64 and arm64 architectures
+        exclude:
+          - os: darwin
+            goarch: amd64  # Exclude building for Intel Macs (amd64 on macOS)
+
+    steps:
+      # Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Set up Go
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.23.0'  # Set the Go version you want to use
+
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          go mod tidy
+          go mod vendor
+
+      # Build the Go project for each OS/arch
+      - name: Build for ${{ matrix.os }}-${{ matrix.goarch }}
+        run: |
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.goarch }} go build -o cortexpoint-${{ matrix.os }}-${{ matrix.goarch }} main.go
+
+      # Archive the built binaries
+      - name: Archive Binaries
+        run: |
+          mkdir -p release
+          mv cortexpoint-${{ matrix.os }}-${{ matrix.goarch }} release/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Set up GitHub release
+      - name: Create Release
+        id: release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
+          token: ${{ secrets.GITHUB_TOKEN }}  # Explicitly passing the token (optional, it should work without this)
+
+      # Upload the files as release assets
+      - name: Upload Binaries to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
+
